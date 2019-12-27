@@ -28,7 +28,7 @@ private:
     sigslot<int> m_sig;
 };
 
-class subject
+class subject : public enable_shared_from_this<subject>
 {
 public:
     void fun(int a)
@@ -38,9 +38,11 @@ public:
 
     void reg()
     {
-        //m_id = observer::instance()->connect(std::bind(&subject::fun, this, std::placeholders::_1));
-        m_id = observer::instance()->connect([this](int s) {
-            fun(s);
+        m_id = observer::instance()->connect([self = (std::weak_ptr<subject>)shared_from_this()](int s) {
+            if (auto shared_self = self.lock())
+            {
+                shared_self->fun(s);
+            }
         });
     }
 
@@ -50,8 +52,16 @@ private:
 
 int main(int, char **)
 {
-    subject s;
-    s.reg();
+#if 0
+    // test disconnect
+    {
+        auto s = std::make_shared<subject>();
+        s->reg();
+    }
+#else
+    auto s = std::make_shared<subject>();
+    s->reg();
+#endif
     observer::instance()->notify(99);
     return 0;
 }
