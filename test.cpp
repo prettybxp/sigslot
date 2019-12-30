@@ -50,18 +50,27 @@ private:
     sigslot<int>::SlotID m_id;
 };
 
+class A : public trackable
+{
+public:
+    void haha(int c)
+    {
+        cout << "in haha c=" << c << endl;
+    }
+};
+
 int main(int, char **)
 {
-#if 0
-    // test disconnect
-    {
-        auto s = std::make_shared<subject>();
-        s->reg();
-    }
-#else
-    auto s = std::make_shared<subject>();
-    s->reg();
-#endif
-    observer::instance()->notify(99);
+
+    //   observer::instance()->notify(99);
+    sigslot<int> sig;
+    //{
+    auto a = std::make_shared<A>();
+    auto h = sig.connect(std::bind(&A::haha, a.get(), std::placeholders::_1), a);
+    //}
+    a.reset();
+    //sig.disconnect(h);
+    sig(99);
+
     return 0;
 }
