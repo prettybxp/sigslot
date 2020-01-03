@@ -5,63 +5,144 @@
 
 using namespace std;
 
-class observer
+// Hello, World! (Beginner)
+// The following example writes "Hello, World!" using signals and slots. First,
+// we create a signal sig, a signal that takes no arguments and has a void return value.
+// Next, we connect the hello function object to the signal using the connect method.
+// Finally, use the signal sig like a function to call the slots, which in turns invokes HelloWorld::operator() to print "Hello, World!".
+struct HelloWorld
 {
-public:
-    static observer *instance()
+    void operator()() const
     {
-        static observer inst;
-        return &inst;
+        cout << "Hello, World!" << endl;
     }
-
-    sigslot<int>::SlotID connect(sigslot<int>::SlotFunc slot)
-    {
-        return m_sig.connect(std::move(slot));
-    }
-
-    void notify(int n)
-    {
-        m_sig(n);
-    }
-
-private:
-    sigslot<int> m_sig;
 };
 
-class subject : public enable_shared_from_this<subject>
+void test1()
 {
-public:
-    void fun(int a)
-    {
-        cout << "in subject::fun a=" << a << endl;
-    }
+    utils::sigslot<void()> sig;
+    HelloWorld hello;
+    sig.connect(hello);
+    sig();
+}
 
-    void reg()
-    {
-        m_id = observer::instance()->connect([self = (std::weak_ptr<subject>)shared_from_this()](int s) {
-            if (auto shared_self = self.lock())
-            {
-                shared_self->fun(s);
-            }
-        });
-    }
+// Slots aren't expected to exist indefinitely after they are connected.
+// Often slots are only used to receive a few events and are then disconnected,
+// and the programmer needs control to decide when a slot should no longer be connected.
+void test2()
+{
+    utils::sigslot<void()> sig;
+    HelloWorld hello;
+    auto id = sig.connect(hello);
+    sig();
+    sig.disconnect(id);
+    sig();
+}
 
-private:
-    sigslot<int>::SlotID m_id;
+// Connecting Multiple Slots (Beginner)
+// Calling a single slot from a signal isn't very interesting,
+// so we can make the Hello, World program more interesting by splitting the work of printing "Hello, World!" into two completely separate slots.
+// The first slot will print "Hello" and may look like this:
+struct Hello
+{
+    void operator()() const
+    {
+        std::cout << "Hello";
+    }
 };
 
-int main(int, char **)
+struct World
 {
-#if 0
-    // test disconnect
+    void operator()() const
     {
-        auto s = std::make_shared<subject>();
-        s->reg();
+        std::cout << ", World!" << std::endl;
     }
-#else
+};
+
+void test3()
+{
+    utils::sigslot<void()> sig;
+    Hello hello;
+    World world;
+    sig.connect(hello);
+    sig.connect(world);
+    sig();
+}
+
+// Slot Arguments (Beginner)
+// Signals can propagate arguments to each of the slots they call.
+// For instance, a signal that propagates mouse motion events might want to pass along the new mouse coordinates and whether the mouse buttons are pressed.
+// As an example, we'll create a signal that passes two float arguments to its slots.
+// Then we'll create a few slots that print the results of various arithmetic operations on these values.
+
+void print_args(float x, float y)
+{
+    std::cout << "The arguments are " << x << " and " << y << std::endl;
+}
+
+void print_sum(float x, float y)
+{
+    std::cout << "The sum is " << x + y << std::endl;
+}
+
+void print_product(float x, float y)
+{
+    std::cout << "The product is " << x * y << std::endl;
+}
+
+void print_difference(float x, float y)
+{
+    std::cout << "The difference is " << x - y << std::endl;
+}
+
+void print_quotient(float x, float y)
+{
+    std::cout << "The quotient is " << x / y << std::endl;
+}
+
+void test4()
+{
+    utils::sigslot<void(float, float)> sig;
+
+    sig.connect(&print_args);
+    sig.connect(&print_sum);
+    sig.connect(&print_product);
+    sig.connect(&print_difference);
+    sig.connect(&print_quotient);
+
+    sig(5., 3.);
+}
+
+// Automatic Connection Management (Intermediate)
+// SignalSlot can automatically track the lifetime of objects involved in signal/slot connections,
+// including automatic disconnection of slots when objects involved in the slot call are destroyed.
+
+class subject
+{
+public:
+    void function(int c)
+    {
+        cout << "in subject::function c=" << c << endl;
+    }
+};
+
+void test5()
+{
+    using SigSlot = utils::sigslot<void(int)>;
+    SigSlot sig;
     auto s = std::make_shared<subject>();
-    s->reg();
-#endif
-    observer::instance()->notify(99);
+    sig.connect(SigSlot::SlotType(std::bind(&subject::function, s.get(), std::placeholders::_1)).track(s));
+    sig(99);
+    s.reset();
+    sig(66);
+}
+
+int main()
+{
+    test1();
+    test2();
+    test3();
+    test4();
+    test5();
     return 0;
 }
