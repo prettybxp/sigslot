@@ -62,7 +62,7 @@ public:
     }
 
 private:
-    std::unique_ptr<shared_ptr_continer_base> m_imp;
+    std::shared_ptr<shared_ptr_continer_base> m_imp;
 };
 
 struct weak_ptr_continer_base
@@ -95,13 +95,14 @@ class slot<R(ArgTypes...)>
 public:
     using SlotFunc = std::function<R(ArgTypes...)>;
 
-    slot(SlotFunc const &func) : m_func(func)
+    template <typename T>
+    slot(T const &func) : m_func(func)
     {
     }
 
-    slot(slot &other)
+    slot(slot const &other)
     {
-        m_weak.swap(other.m_weak);
+        m_weak = other.m_weak;
         m_tracked = other.m_tracked;
         m_func = other.m_func;
     }
@@ -137,7 +138,7 @@ public:
 
 private:
     SlotFunc m_func;
-    std::unique_ptr<weak_ptr_continer_base> m_weak;
+    std::shared_ptr<weak_ptr_continer_base> m_weak;
     bool m_tracked = false;
 };
 
@@ -153,7 +154,7 @@ public:
     using SlotType = detail::slot<R(ArgTypes...)>;
     using SlotID = std::weak_ptr<SlotType>;
 
-    SlotID connect(SlotType &slot)
+    SlotID connect(SlotType const &slot)
     {
         std::lock_guard<std::mutex> guard(m_mutex);
         auto const s = std::make_shared<SlotType>(slot);
