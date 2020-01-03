@@ -4,6 +4,8 @@
 #include <memory>
 #include <functional>
 #include <list>
+#include <mutex>
+#include <algorithm>
 
 namespace utils
 {
@@ -107,8 +109,8 @@ public:
     template <typename SharedPtrType>
     slot &track(SharedPtrType const &sharedptr)
     {
-        auto weak = typename shared_ptr_traits<SharedPtrType>::weak_type(sharedptr);
-        m_weak = std::make_unique<weak_ptr_continer_imp<decltype(weak)>>(weak);
+        using WeakPtrType = typename shared_ptr_traits<SharedPtrType>::weak_type;
+        m_weak = std::make_unique<weak_ptr_continer_imp<WeakPtrType>>(WeakPtrType(sharedptr));
         m_tracked = true;
         return *this;
     }
@@ -153,6 +155,7 @@ public:
 
     SlotID connect(SlotType &slot)
     {
+        std::lock_guard<std::mutex> guard(m_mutex);
         auto const s = std::make_shared<SlotType>(slot);
         m_slots.push_back(s);
         return s;
@@ -160,7 +163,8 @@ public:
 
     void disconnect(SlotID const &s)
     {
-        m_slots.remove_if([&s](SlotType const &slot) {
+        std::lock_guard<std::mutex> guard(m_mutex);
+        m_slots.remove_if([&s](std::shared_ptr<SlotType> const &slot) {
             return slot == s.lock();
         });
     }
@@ -168,13 +172,29 @@ public:
     template <typename... _Args>
     void operator()(_Args &&... args)
     {
-        m_slots.remove_if([&args...](std::shared_ptr<SlotType> const &s) {
+        m_mutex.lock();
+        auto slots = m_slots;
+        m_mutex.unlock();
+
+        decltype(slots) remove_slots;
+        std::copy_if(slots.begin(), slots.end(), std::back_inserter(remove_slots), [&args...](std::shared_ptr<SlotType> const &s) {
             return !(*s)(std::forward<_Args>(args)...);
         });
+        if (remove_slots.empty())
+        {
+            return;
+        }
+
+        m_mutex.lock();
+        m_slots.remove_if([&remove_slots](std::shared_ptr<SlotType> const &slot) {
+            return std::find(remove_slots.begin(), remove_slots.end(), slot) != remove_slots.end();
+        });
+        m_mutex.unlock();
     }
 
 private:
     std::list<std::shared_ptr<SlotType>> m_slots;
+    std::mutex m_mutex;
 };
 
 } // namespace utils
