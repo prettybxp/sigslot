@@ -137,6 +137,17 @@ void test5()
     sig(66);
 }
 
+//test lamda
+void test6()
+{
+    using SigSlot = utils::sigslot<void(int)>;
+    SigSlot sig;
+    sig.connect([](int a) {
+        cout << "in lamda a= " << a << endl;
+    });
+    sig(88);
+}
+
 int main()
 {
     test1();
@@ -144,5 +155,6 @@ int main()
     test3();
     test4();
     test5();
+    test6();
     return 0;
 }
