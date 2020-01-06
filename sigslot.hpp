@@ -52,7 +52,7 @@ public:
     shared_ptr_continer() {}
     template <typename SharedPtrType>
     shared_ptr_continer(SharedPtrType const &shared)
-        : m_imp(std::make_unique<shared_ptr_continer_imp<SharedPtrType>>(shared))
+        : m_imp(std::make_shared<shared_ptr_continer_imp<SharedPtrType>>(shared))
     {
     }
 
@@ -111,7 +111,7 @@ public:
     slot &track(SharedPtrType const &sharedptr)
     {
         using WeakPtrType = typename shared_ptr_traits<SharedPtrType>::weak_type;
-        m_weak = std::make_unique<weak_ptr_continer_imp<WeakPtrType>>(WeakPtrType(sharedptr));
+        m_weak = std::make_shared<weak_ptr_continer_imp<WeakPtrType>>(WeakPtrType(sharedptr));
         m_tracked = true;
         return *this;
     }
