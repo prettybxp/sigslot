@@ -13,30 +13,37 @@ namespace utils
 namespace detail
 {
 
-template <typename SharedPtr>
-struct shared_ptr_traits
+template <typename SmartPtr>
+struct smart_ptr_traits
 {
 };
 
 template <typename T>
-struct shared_ptr_traits<std::shared_ptr<T>>
+struct smart_ptr_traits<std::shared_ptr<T>>
 {
     typedef std::weak_ptr<T> weak_type;
 };
 
-struct shared_ptr_continer_base
+template <typename T>
+struct smart_ptr_traits<std::weak_ptr<T>>
+{
+    typedef std::shared_ptr<T> share_type;
+};
+
+struct shared_ptr_continer
 {
     virtual operator bool() = 0;
 };
 
 template <typename SharedPtrType>
-class shared_ptr_continer_imp : public shared_ptr_continer_base
+class shared_ptr_continer_imp : public shared_ptr_continer
 {
 public:
     shared_ptr_continer_imp(SharedPtrType const &shared)
         : m_shared(shared)
     {
     }
+    virtual ~shared_ptr_continer_imp(){}
     operator bool()
     {
         return (bool)m_shared;
@@ -46,40 +53,24 @@ private:
     SharedPtrType m_shared;
 };
 
-class shared_ptr_continer
+
+struct weak_ptr_continer
 {
-public:
-    shared_ptr_continer() {}
-    template <typename SharedPtrType>
-    shared_ptr_continer(SharedPtrType const &shared)
-        : m_imp(std::make_shared<shared_ptr_continer_imp<SharedPtrType>>(shared))
-    {
-    }
-
-    operator bool()
-    {
-        return m_imp && m_imp->operator bool();
-    }
-
-private:
-    std::shared_ptr<shared_ptr_continer_base> m_imp;
-};
-
-struct weak_ptr_continer_base
-{
-    virtual shared_ptr_continer lock() const = 0;
+    virtual std::shared_ptr<shared_ptr_continer> lock() const = 0;
 };
 
 template <typename WeakPtrType>
-class weak_ptr_continer_imp : public weak_ptr_continer_base
+class weak_ptr_continer_imp : public weak_ptr_continer
 {
 public:
     weak_ptr_continer_imp(WeakPtrType const &weak) : m_weak(weak)
     {
     }
-    virtual shared_ptr_continer lock() const
+    virtual ~weak_ptr_continer_imp(){}
+    virtual std::shared_ptr<shared_ptr_continer> lock() const
     {
-        return shared_ptr_continer(m_weak.lock());
+        using SharedPtrType = typename smart_ptr_traits<WeakPtrType>::share_type;
+        return std::make_shared<shared_ptr_continer_imp<SharedPtrType>>(m_weak.lock());
     }
 
 private:
@@ -110,7 +101,7 @@ public:
     template <typename SharedPtrType>
     slot &track(SharedPtrType const &sharedptr)
     {
-        using WeakPtrType = typename shared_ptr_traits<SharedPtrType>::weak_type;
+        using WeakPtrType = typename smart_ptr_traits<SharedPtrType>::weak_type;
         m_weak = std::make_shared<weak_ptr_continer_imp<WeakPtrType>>(WeakPtrType(sharedptr));
         m_tracked = true;
         return *this;
@@ -119,26 +110,34 @@ public:
     template <typename... _Args>
     bool operator()(_Args &&... args)
     {
-        shared_ptr_continer sharad;
-        if (m_tracked)
-        {
-            sharad = m_weak->lock();
-            if (not sharad)
-            {
-                return false;
-            }
-        }
         if (!m_func)
         {
             return false;
         }
-        m_func(std::forward<_Args>(args)...);
+        if (m_tracked)
+        {
+            auto shared = m_weak->lock();
+            if (shared->operator bool())
+            {
+                m_func(std::forward<_Args>(args)...);
+            }
+            else
+            {
+                return false;
+            }
+            
+        }
+        else
+        {
+            m_func(std::forward<_Args>(args)...);
+        }
+
         return true;
     }
 
 private:
     SlotFunc m_func;
-    std::shared_ptr<weak_ptr_continer_base> m_weak;
+    std::shared_ptr<weak_ptr_continer> m_weak;
     bool m_tracked = false;
 };
 
